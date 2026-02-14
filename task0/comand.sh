@@ -1,0 +1,1 @@
+watch -n 1 'curl -o /dev/null -s -w "$(date +%s) | %{http_code} | %{time_total}\n" https://s3.mdst.yandex.net/ping'
