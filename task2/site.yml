@@ -1,0 +1,76 @@
+- name: Настройка Nginx с проверкой порта
+  hosts: localhost
+  become: yes
+  gather_facts: no
+
+  vars:
+    my_port: 8080
+
+  tasks:
+    # проверяем порт нашим валидатором
+    - name: Проверить что порт свободен
+      validator:
+        port: "{{ my_port }}"
+      register: port_check
+
+    - name: Показать результат проверки
+      debug:
+        msg: "{{ port_check.msg }}"
+
+    # ставим nginx
+    - name: Установить nginx
+      apt:
+        name: nginx
+        state: present
+        update_cache: yes
+
+    # создаём папку с файлами
+    - name: Создать папку /var/www/files
+      file:
+        path: /var/www/files
+        state: directory
+        mode: '0755'
+
+    # кладём туда 3 файла
+    - name: Создать тестовые файлы
+      copy:
+        content: "Это файл номер {{ item }}"
+        dest: "/var/www/files/file_{{ item }}.txt"
+        mode: '0644'
+      loop: [1, 2, 3]
+
+    # создаём конфиг nginx с проверенным портом
+    - name: Создать конфигурацию nginx
+      template:
+        src: templates/nginx.conf.j2
+        dest: /etc/nginx/sites-available/files
+      vars:
+        port: "{{ port_check.valid_port }}"
+
+    # включаем наш сайт
+    - name: Активировать конфигурацию
+      file:
+        src: /etc/nginx/sites-available/files
+        dest: /etc/nginx/sites-enabled/files
+        state: link
+
+    # оключаем стандартный сайт
+    - name: Удалить дефолтный сайт
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      ignore_errors: yes
+
+    # перезапускаем nginx
+    - name: Перезапустить nginx
+      service:
+        name: nginx
+        state: restarted
+
+    # показываем как проверить
+    - name: Готово!
+      debug:
+        msg: |
+          ✅ Всё настроено!
+          Открой браузер: http://localhost:{{ my_port }}/files/
+          Или выполни: curl http://localhost:{{ my_port }}/files/

@@ -1,0 +1,81 @@
+---
+- name: Настройка Nginx для раздачи статических файлов
+  hosts: all
+  become: yes  # с правами суперпользователя 
+  gather_facts: no 
+
+  vars:
+    # директория для файлов 
+    files_directory: /var/www/files
+    # порт для  тginx 
+    nginx_listen_port: 80
+
+  tasks:
+    # установка тginx
+    - name: 1. Установить пакет nginx
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+        update_cache: yes
+
+    # создание основной папки для файлов
+    - name: 2. Создать директорию для файлов
+      ansible.builtin.file:
+        path: "{{ files_directory }}"
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+
+    # создание тестовых файлов внутри папки
+    - name: 3. Создать тестовые файлы
+      ansible.builtin.copy:
+        content: |
+          Это тестовый файл номер {{ item }}.
+          Он был создан автоматически.
+        dest: "{{ files_directory }}/file_{{ item }}.txt"
+        owner: www-data
+        group: www-data
+        mode: '0644'
+      loop: [1, 2, 3] 
+
+    # создание вложенной папки 
+    - name: 4. Создать вложенную папку
+      ansible.builtin.file:
+        path: "{{ files_directory }}/example_folder"
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+
+    #  конфигурация  nginx с помощью шаблона
+    - name: 5. Создать конфигурационный файл для сайта
+      ansible.builtin.template:
+        src: nginx.conf
+        dest: /etc/nginx/sites-available/files
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart nginx  
+
+    #  включается конфигурация 
+    - name: 6. Включить созданный сайт
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/files
+        dest: /etc/nginx/sites-enabled/files
+        state: link
+      notify: restart nginx
+
+    #  удаления базового сайта 
+    - name: 7. Отключить дефолтный сайт
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: restart nginx
+
+  handlers:
+    #  перезапуск nginx, вызывается при изменениях конфигурации
+    - name: restart nginx
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
